@@ -26,6 +26,20 @@
 
 * Add test (#4)
 
+# 0.1.1 - 25 June 2025
+
+## Features
+
+* Add changes.md (#6)
+
+## Documentation
+
+* Add version (#3)
+
+## Tests
+
+* Add test (#4)
+
 # 2.21.1 - 1 May 2025
 
 ## Reverted
