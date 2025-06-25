@@ -25,6 +25,7 @@ import time
 import webbrowser
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import github
 import github.GitRelease
@@ -34,7 +35,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-class MyHandler(logging.Handler):
+class MyHandler(logging.StreamHandler[Any]):
     """Custom logging handler to format messages based on their level."""
 
     def format(self, record: logging.LogRecord):
