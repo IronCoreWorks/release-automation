@@ -313,13 +313,13 @@ def update_versions(version, post_release=False):
                 update_ops_version(file_path, new_version)
             else:
                 update_pyproject_version(file_path, new_version)
-            print(f"Updated {file_path} to post-release version: {new_version}")
+            logger.info(f"Updated {file_path} to post-release version: {new_version}")
         else:
             if file_path == ops_version:
                 update_ops_version(file_path, version)
             else:
                 update_pyproject_version(file_path, version)
-            print(f"Updated {file_path} to release version: {version}")
+            logger.info(f"Updated {file_path} to release version: {version}")
 
 
 def countdown(msg, t):
