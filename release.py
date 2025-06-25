@@ -394,6 +394,10 @@ def release(owner, repo_name, branch):
 
 
 def post_release(owner, repo_name, branch):
+    subprocess.run(["git", "fetch", "upstream"], check=True)
+    subprocess.run(["git", "checkout", "main"], check=True)
+    subprocess.run(["git", "merge", "upstream/main"], check=True)
+
     org = gh_client.get_organization(owner)
     repo = org.get_repo(repo_name)
 
