@@ -31,6 +31,14 @@ if "GITHUB_TOKEN" not in os.environ:
     logger.critical("Environment variable GITHUB_TOKEN not set.")
     exit(1)
 
+OPS_VERSION_STR = r"version: str = \'(\d+\.\d+\.\d+(?:\.dev\d+)?)\'"
+PYPROJECT_VERSION_STR = r'version = "(\d+\.\d+\.\d+(?:\.dev\d+)?)"'
+VERSION_FILES = [
+    "ops/version.py",
+    "testing/pyproject.toml",
+    "tracing/pyproject.toml",
+]
+
 auth = github.Auth.Token(os.getenv("GITHUB_TOKEN"))
 gh_client = github.Github(auth=auth)
 
@@ -268,58 +276,55 @@ def parse_version(version_str):
     return base_version, dev_suffix
 
 
-def update_ops_version(file_path, new_version):
+def update_ops_version(file, new_version):
+    file_path = Path(file)
     content = file_path.read_text()
     updated = re.sub(
-        r"version: str = \'\d+\.\d+\.\d+(\.dev\d+)?\'",
+        OPS_VERSION_STR,
         f"version: str = '{new_version}'",
         content,
     )
     file_path.write_text(updated)
 
 
-def update_pyproject_version(file_path, new_version):
+def update_pyproject_version(file, new_version):
+    file_path = Path(file)
     content = file_path.read_text()
-    updated = re.sub(
-        r'version = "\d+\.\d+\.\d+(\.dev\d+)?"', f'version = "{new_version}"', content
-    )
+    updated = re.sub(PYPROJECT_VERSION_STR, f'version = "{new_version}"', content)
     file_path.write_text(updated)
 
 
-def update_versions(version, post_release=False):
-    # Define file paths
-    ops_version = Path("ops/version.py")
-    testing_pyproject = Path("testing/pyproject.toml")
-    tracing_pyproject = Path("tracing/pyproject.toml")
+def update_versions_for_release(version):
+    for file in VERSION_FILES:
+        if "ops" in file:
+            update_ops_version(file, version)
+        else:
+            update_pyproject_version(file, version)
+        logger.info(f"Updated {file} to release version: {version}")
 
-    ops_version_str = r"version: str = \'(\d+\.\d+\.\d+(?:\.dev\d+)?)\'"
-    pyproject_version_str = r'version = "(\d+\.\d+\.\d+(?:\.dev\d+)?)"'
 
-    for file_path in [ops_version, testing_pyproject, tracing_pyproject]:
-        if file_path == ops_version:
+def update_versions_for_post_release():
+    for file in VERSION_FILES:
+        file_path = Path(file)
+
+        # Check the current version and add '.dev0' suffix.
+        if "ops" in file:
             content = file_path.read_text()
-            current_version = re.search(ops_version_str, content).group(1)
+            version_str = re.search(OPS_VERSION_STR, content).group(1)
         else:
             content = file_path.read_text()
-            current_version = re.search(pyproject_version_str, content).group(1)
+            version_str = re.search(PYPROJECT_VERSION_STR, content).group(1)
 
-        if post_release:
-            # After release, add the '.dev0' suffix.
-            _, dev_suffix = parse_version(current_version)
-            if dev_suffix:
-                raise ValueError(f"Version already has dev suffix: {current_version}")
-            new_version = version + ".dev0"
-            if file_path == ops_version:
-                update_ops_version(file_path, new_version)
-            else:
-                update_pyproject_version(file_path, new_version)
-            logger.info(f"Updated {file_path} to post-release version: {new_version}")
+        current_version, dev_suffix = parse_version(version_str)
+        if dev_suffix:
+            raise ValueError(f"Version already has dev suffix: {current_version}")
+
+        new_version = bump_version(current_version) + ".dev0"
+        if "ops" in file:
+            update_ops_version(file_path, new_version)
         else:
-            if file_path == ops_version:
-                update_ops_version(file_path, version)
-            else:
-                update_pyproject_version(file_path, version)
-            logger.info(f"Updated {file_path} to release version: {version}")
+            update_pyproject_version(file_path, new_version)
+        logger.info(f"Updated {file} to post-release version: {new_version}")
 
 
 def countdown(msg, t):
@@ -370,18 +375,13 @@ def release(owner, repo_name, branch):
     changes = format_changes(categories, tag)
     update_changes_file(changes, "CHANGES.md")
 
-    update_versions(tag)
+    update_versions_for_release(tag)
 
     new_branch = f"release-prep-{tag}"
     subprocess.run(["git", "checkout", "-b", new_branch], check=True)
-    changed_files = (
-        "CHANGES.md",
-        "ops/version.py",
-        "testing/pyproject.toml",
-        "tracing/pyproject.toml",
-    )
-    for f in changed_files:
-        subprocess.run(["git", "add", f], check=True)
+    changed_files = ["CHANGES.md"] + VERSION_FILES
+    for file in changed_files:
+        subprocess.run(["git", "add", file], check=True)
     subprocess.run(["git", "commit", "-m", f"chore: prepare release {tag}"], check=True)
     subprocess.run(["git", "push", "origin", new_branch], check=True)
     pr = repo.create_pull(
@@ -393,8 +393,25 @@ def release(owner, repo_name, branch):
     logger.info(f"Created PR: {pr.html_url}")
 
 
-def post_release():
-    pass
+def post_release(owner, repo_name, branch):
+    org = gh_client.get_organization(owner)
+    repo = org.get_repo(repo_name)
+
+    update_versions_for_post_release()
+
+    new_branch = "post-release"
+    subprocess.run(["git", "checkout", "-b", new_branch], check=True)
+    for file in VERSION_FILES:
+        subprocess.run(["git", "add", file], check=True)
+    subprocess.run(["git", "commit", "-m", "chore: post release"], check=True)
+    subprocess.run(["git", "push", "origin", new_branch], check=True)
+    pr = repo.create_pull(
+        title="Post Release",
+        body="This PR updates the version files after the release.",
+        head=f"{gh_client.get_user().login}:{new_branch}",  # "your_username:new_branch"
+        base=branch,
+    )
+    logger.info(f"Created PR: {pr.html_url}")
 
 
 if __name__ == "__main__":
@@ -426,4 +443,4 @@ if __name__ == "__main__":
     if not args.post_release:
         release(owner=args.owner, repo_name=args.repo, branch=args.branch)
     else:
-        post_release()
+        post_release(owner=args.owner, repo_name=args.repo, branch=args.branch)
