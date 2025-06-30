@@ -557,7 +557,7 @@ def post_release(owner: str, repo_name: str, branch: str):
     repo = org.get_repo(repo_name)
 
     update_versions_for_post_release(repo, branch)
-    exit(0)
+
     new_branch = 'post-release'
     subprocess.run(['/usr/bin/git', 'checkout', '-b', new_branch], check=True)
     for file in VERSION_FILES.values():
