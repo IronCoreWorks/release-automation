@@ -515,7 +515,7 @@ def draft_release(owner: str, repo_name: str, branch: str):
 
     new_branch = f'release-prep-{tag}'
     subprocess.run(['/usr/bin/git', 'checkout', '-b', new_branch], check=True)
-    changed_files = ['CHANGES.md', *VERSION_FILES]
+    changed_files = ['CHANGES.md', *VERSION_FILES.values()]
     for file in changed_files:
         subprocess.run(['/usr/bin/git', 'add', file], check=True)
     subprocess.run(['/usr/bin/git', 'commit', '-m', f'chore: prepare release {tag}'], check=True)
@@ -562,7 +562,7 @@ def post_release(owner: str, repo_name: str, branch: str):
 
     new_branch = 'post-release'
     subprocess.run(['/usr/bin/git', 'checkout', '-b', new_branch], check=True)
-    for file in VERSION_FILES:
+    for file in VERSION_FILES.values():
         subprocess.run(['/usr/bin/git', 'add', file], check=True)
     subprocess.run(['/usr/bin/git', 'commit', '-m', 'chore: post release'], check=True)
     subprocess.run(['/usr/bin/git', 'push', 'origin', new_branch], check=True)
