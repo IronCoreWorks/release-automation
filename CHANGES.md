@@ -1,3 +1,31 @@
+# 0.2.0 - 30 June 2025
+
+## Features
+
+* Add changes.md (#6)
+
+## Documentation
+
+* Add version (#3)
+
+## Tests
+
+* Add test (#4)
+
+# 0.2.0 - 30 June 2025
+
+## Features
+
+* Add changes.md (#6)
+
+## Documentation
+
+* Add version (#3)
+
+## Tests
+
+* Add test (#4)
+
 # 0.1.1 - 25 June 2025
 
 ## Features
