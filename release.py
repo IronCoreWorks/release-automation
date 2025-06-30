@@ -325,7 +325,7 @@ def parse_version(version: str) -> tuple[str, str]:
     return base_version, dev_suffix
 
 
-def get_current_testing_version_without_dev_suffix():
+def get_testing_version_without_dev_suffix():
     """Parse the current version of the testing module without .dev0 suffix."""
     file = VERSION_FILES['testing']
     file_path = Path(file)
@@ -434,7 +434,7 @@ def update_versions_for_release(version: str):
     """Update version files to the specified release version."""
     new_ops_version = version
     # Remove dev suffix, keep base version, bump minor version.
-    new_testing_version = bump_minor_version(get_current_testing_version_without_dev_suffix())
+    new_testing_version = get_testing_version_without_dev_suffix()
     update_ops_version(new_ops_version, new_testing_version)
     update_testing_pyproject_version(new_ops_version, new_testing_version)
     update_tracing_pyproject_version(new_ops_version)
@@ -449,7 +449,7 @@ def update_versions_for_post_release(repo: github.Repository.Repository, branch_
         raise ValueError('No latest version found.')
     new_ops_version = bump_minor_version(latest_ops_version) + ".dev0"
     new_testing_version = (
-        bump_minor_version(get_current_testing_version_without_dev_suffix()) + ".dev0"
+        bump_minor_version(get_testing_version_without_dev_suffix()) + ".dev0"
     )
     update_ops_version(new_ops_version, new_testing_version)
     update_testing_pyproject_version(new_ops_version, new_testing_version)
