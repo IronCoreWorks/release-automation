@@ -334,9 +334,7 @@ def get_testing_version_without_dev_suffix():
     if not match:
         raise ValueError(f'Could not find version string in {file}')
     version_str = match.group(1)
-    current_version, dev_suffix = parse_version(version_str)
-    if not dev_suffix:
-        raise ValueError(f'Version of testing does not have dev suffix: {version_str}')
+    current_version, _ = parse_version(version_str)
     return current_version
 
 
