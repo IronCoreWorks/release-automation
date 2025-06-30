@@ -41,11 +41,11 @@ class MyHandler(logging.StreamHandler[Any]):
     def format(self, record: logging.LogRecord):
         """Format the log record based on its level."""
         if record.levelno == logging.INFO:
-            self.setFormatter(logging.Formatter('INFO: %(message)s'))
+            self.setFormatter(logging.Formatter('ℹ️ INFO: %(message)s'))  # noqa: RUF001
         elif record.levelno == logging.WARNING:
-            self.setFormatter(logging.Formatter('WARNING: %(message)s'))
+            self.setFormatter(logging.Formatter('⚠️ WARNING: %(message)s'))
         elif record.levelno == logging.ERROR:
-            self.setFormatter(logging.Formatter('ERROR: %(message)s'))
+            self.setFormatter(logging.Formatter('❌ ERROR: %(message)s'))
         return super().format(record)
 
 
@@ -82,10 +82,10 @@ def get_latest_version(repo: github.Repository.Repository, branch_name: str) -> 
     return None
 
 
-def bump_version(version: str) -> str:
-    """Bump patch version."""
+def bump_minor_version(version: str) -> str:
+    """Bump minor version."""
     major, minor, patch = map(int, version.split('.'))
-    return f'{major}.{minor}.{patch + 1}'
+    return f'{major}.{minor + 1}.{patch}'
 
 
 def get_new_version(owner: str, repo: github.Repository.Repository, branch_name: str) -> str:
@@ -101,8 +101,8 @@ def get_new_version(owner: str, repo: github.Repository.Repository, branch_name:
         logger.info('No version tags found in branch "{branch_name}".')
         suggested_version = ''
     else:
-        suggested_version = bump_version(latest_version)
-        logger.info(f'Latest version in branch "{branch_name}"": {latest_version}')
+        suggested_version = bump_minor_version(latest_version)
+        logger.info(f'Latest version in branch "{branch_name}": {latest_version}')
         logger.info(f'Suggested new version: {suggested_version}')
 
     while True:
@@ -364,7 +364,7 @@ def update_versions_for_post_release():
         if dev_suffix:
             raise ValueError(f'Version already has dev suffix: {current_version}')
 
-        new_version = bump_version(current_version) + '.dev0'
+        new_version = bump_minor_version(current_version) + '.dev0'
         if 'ops' in file:
             update_ops_version(file, new_version)
         else:
@@ -447,8 +447,8 @@ def release(owner: str, repo_name: str, branch: str):
 def post_release(owner: str, repo_name: str, branch: str):
     """Post-release actions: update version files and create a PR."""
     subprocess.run(['/usr/bin/git', 'fetch', 'upstream'], check=True)
-    subprocess.run(['/usr/bin/git', 'checkout', 'main'], check=True)
-    subprocess.run(['/usr/bin/git', 'merge', 'upstream/main'], check=True)
+    subprocess.run(['/usr/bin/git', 'checkout', branch], check=True)
+    subprocess.run(['/usr/bin/git', 'merge', f'upstream/{branch}'], check=True)
 
     org = gh_client.get_organization(owner)
     repo = org.get_repo(repo_name)
@@ -472,19 +472,17 @@ def post_release(owner: str, repo_name: str, branch: str):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # TODO: change the default
     parser.add_argument(
         '--repo',
         '-r',
         help='Repository name (e.g. "operator")',
-        default='release-automation',
+        default='operator',
     )
-    # TODO: change the default
     parser.add_argument(
         '--owner',
         '-o',
         help='Owner name (e.g. "Canonical")',
-        default='IronCoreWorks',
+        default='Canonical',
     )
     parser.add_argument('--branch', '-b', help='Branch to create the release from', default='main')
     parser.add_argument(
