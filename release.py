@@ -55,13 +55,27 @@ if 'GITHUB_TOKEN' not in os.environ:
     logger.critical('Environment variable GITHUB_TOKEN not set.')
     exit(1)
 
-OPS_VERSION_STR = r'version: str = \'(\d+\.\d+\.\d+(?:\.dev\d+)?)\''
-PYPROJECT_VERSION_STR = r'version = "(\d+\.\d+\.\d+(?:\.dev\d+)?)"'
-VERSION_FILES = [
-    'ops/version.py',
-    'testing/pyproject.toml',
-    'tracing/pyproject.toml',
-]
+VERSION_STR = r'(\d+\.\d+\.\d+(?:\.dev\d+)?)'
+OPS_SRC_VERSION_STR = r'version: str = \'' + VERSION_STR + '\''
+PYPROJECT_VERSION_STR = r'version = "' + VERSION_STR + '"'
+PYPROJECT_OPS_VERSION_STR = r'ops==' + VERSION_STR
+PYPROJECT_TESTING_VERSION_STR = r'ops-scenario==' + VERSION_STR
+PYPROJECT_TRACING_VERSION_STR = r'ops-tracing==' + VERSION_STR
+# match the following two lines in uv.lock:
+# name = "ops-scenario"
+# version = "7.23.0.dev0"
+UVLOCK_TESTING_VERSION_STR = r'name = "ops-scenario"\nversion = "' + VERSION_STR + '"'
+# match the following two lines in uv.lock:
+# name = "ops-tracing"
+# version = "2.23.0.dev0"
+UVLOCK_TRACING_VERSION_STR = r'name = "ops-tracing"\nversion = "' + VERSION_STR + '"'
+VERSION_FILES = {
+    'ops/src': 'ops/version.py',
+    'ops/pyproject': 'ops/version.py',
+    'testing': 'testing/pyproject.toml',
+    'tracing': 'tracing/pyproject.toml',
+    'uvlock': 'uv.lock',
+}
 
 auth = github.Auth.Token(os.environ['GITHUB_TOKEN'])
 gh_client = github.Github(auth=auth)
@@ -244,10 +258,10 @@ def get_title_and_summary(auto_generated_title: str) -> tuple[str, str]:
     return title, summary
 
 
-def update_release(release: github.GitRelease.GitRelease, title: str, notes: str):
+def update_draft_release(release: github.GitRelease.GitRelease, title: str, notes: str):
     """Update the release with the provided title and notes."""
     try:
-        release.update_release(name=title, message=notes)
+        release.update_release(name=title, message=notes, draft=True)
         logger.info('Release title and notes updated.')
     except Exception as e:
         print(f'Error creating release: {e}')
@@ -311,65 +325,136 @@ def parse_version(version: str) -> tuple[str, str]:
     return base_version, dev_suffix
 
 
-def update_ops_version(file: str, new_version: str):
-    """Update the ops version in the specified file."""
+def get_current_testing_version_without_dev_suffix():
+    """Parse the current version of the testing module without .dev0 suffix."""
+    file = VERSION_FILES['testing']
+    file_path = Path(file)
+    content = file_path.read_text()
+    match = re.search(PYPROJECT_VERSION_STR, content)
+    if not match:
+        raise ValueError(f'Could not find version string in {file}')
+    version_str = match.group(1)
+    current_version, dev_suffix = parse_version(version_str)
+    if not dev_suffix:
+        raise ValueError(f'Version of testing does not have dev suffix: {version_str}')
+    return current_version
+
+
+def update_ops_version(new_ops_version: str, new_testing_version: str):
+    """Update the ops version in version.py and pyproject.toml."""
+    # version.py
+    ops_src_file = VERSION_FILES['ops/src']
+    ops_src_file_path = Path(ops_src_file)
+    content = ops_src_file_path.read_text()
+    updated = re.sub(
+        OPS_SRC_VERSION_STR,
+        f"version: str = '{new_ops_version}'",
+        content,
+    )
+    ops_src_file_path.write_text(updated)
+    logger.info(f'Updated {ops_src_file} to release version: {new_ops_version}')
+
+    # pyproject
+    ops_pyproject_file = VERSION_FILES['ops/pyproject']
+    ops_pyproject_file_path = Path(ops_pyproject_file)
+    content = ops_pyproject_file_path.read_text()
+    updated = re.sub(
+        PYPROJECT_TESTING_VERSION_STR,
+        f"ops-scenario=={new_testing_version}",
+        content,
+    )
+    updated = re.sub(
+        PYPROJECT_TRACING_VERSION_STR,
+        f"ops-tracing=={new_ops_version}",
+        updated,
+    )
+    ops_pyproject_file_path.write_text(updated)
+    logger.info(f'Updated {ops_pyproject_file} to release version: ops {new_ops_version}'
+                f' testing {new_testing_version}')
+
+def update_testing_pyproject_version(new_ops_version: str, new_testing_version: str):
+    """Update the testing pyproject version."""
+    file = VERSION_FILES['testing']
     file_path = Path(file)
     content = file_path.read_text()
     updated = re.sub(
-        OPS_VERSION_STR,
-        f"version: str = '{new_version}'",
+        PYPROJECT_VERSION_STR,
+        f'version = "{new_testing_version}"',
         content,
     )
+    updated = re.sub(
+        PYPROJECT_OPS_VERSION_STR,
+        f"ops-scenario=={new_testing_version}",
+        updated,
+    )
     file_path.write_text(updated)
+    logger.info(f'Updated {file} to release version: ops {new_ops_version}'
+                f' testing {new_testing_version}')
 
-
-def update_pyproject_version(file: str, new_version: str):
-    """Update the pyproject version in the specified file."""
+def update_tracing_pyproject_version(new_ops_version: str):
+    """Update the tracing pyproject version."""
+    file = VERSION_FILES['tracing']
     file_path = Path(file)
     content = file_path.read_text()
-    updated = re.sub(PYPROJECT_VERSION_STR, f'version = "{new_version}"', content)
+    updated = re.sub(
+        PYPROJECT_VERSION_STR,
+        f'version = "{new_ops_version}"',
+        content,
+    )
+    updated = re.sub(
+        PYPROJECT_OPS_VERSION_STR,
+        f"ops-tracing=={new_ops_version}",
+        updated,
+    )
     file_path.write_text(updated)
+    logger.info(f'Updated {file} to release version: ops {new_ops_version}')
+
+
+def update_uv_lock(new_ops_version: str, new_testing_version: str):
+    """Update the uv.lock file with new ops and testing versions."""
+    file = VERSION_FILES['uvlock']
+    file_path = Path(file)
+    content = file_path.read_text()
+    updated = re.sub(
+        UVLOCK_TESTING_VERSION_STR,
+        f'name = "ops-scenario"\nversion = "{new_testing_version}"',
+        content,
+    )
+    updated = re.sub(
+        UVLOCK_TRACING_VERSION_STR,
+        f'name = "ops-tracing"\nversion = "{new_ops_version}"',
+        updated,
+    )
+    file_path.write_text(updated)
+    logger.info(f'Updated {file} to release version: ops {new_ops_version}'
+                f' testing {new_testing_version}')
 
 
 def update_versions_for_release(version: str):
     """Update version files to the specified release version."""
-    for file in VERSION_FILES:
-        if 'ops' in file:
-            update_ops_version(file, version)
-        else:
-            update_pyproject_version(file, version)
-        logger.info(f'Updated {file} to release version: {version}')
+    new_ops_version = version
+    # Remove dev suffix, keep base version, bump minor version.
+    new_testing_version = bump_minor_version(get_current_testing_version_without_dev_suffix())
+    update_ops_version(new_ops_version, new_testing_version)
+    update_testing_pyproject_version(new_ops_version, new_testing_version)
+    update_tracing_pyproject_version(new_ops_version)
+    update_uv_lock(new_ops_version, new_testing_version)
 
 
-def update_versions_for_post_release():
+def update_versions_for_post_release(repo: github.Repository.Repository, branch_name: str):
     """Update version files to the post-release version with '.dev0' suffix."""
-    for file in VERSION_FILES:
-        file_path = Path(file)
-
-        # Check the current version and add '.dev0' suffix.
-        if 'ops' in file:
-            content = file_path.read_text()
-            match = re.search(OPS_VERSION_STR, content)
-            if not match:
-                raise ValueError(f'Could not find version string in {file}')
-            version_str = match.group(1)
-        else:
-            content = file_path.read_text()
-            match = re.search(PYPROJECT_VERSION_STR, content)
-            if not match:
-                raise ValueError(f'Could not find version string in {file}')
-            version_str = match.group(1)
-
-        current_version, dev_suffix = parse_version(version_str)
-        if dev_suffix:
-            raise ValueError(f'Version already has dev suffix: {current_version}')
-
-        new_version = bump_minor_version(current_version) + '.dev0'
-        if 'ops' in file:
-            update_ops_version(file, new_version)
-        else:
-            update_pyproject_version(file, new_version)
-        logger.info(f'Updated {file} to post-release version: {new_version}')
+    latest_ops_version = get_latest_version(repo, branch_name)
+    if not latest_ops_version:
+        logger.error(f'No latest version found in branch "{branch_name}".')
+        raise ValueError('No latest version found.')
+    new_ops_version = bump_minor_version(latest_ops_version) + ".dev0"
+    new_testing_version = (
+        bump_minor_version(get_current_testing_version_without_dev_suffix()) + ".dev0"
+    )
+    update_ops_version(new_ops_version, new_testing_version)
+    update_testing_pyproject_version(new_ops_version, new_testing_version)
+    update_tracing_pyproject_version(new_ops_version)
+    update_uv_lock(new_ops_version, new_testing_version)
 
 
 def countdown(msg: str, t: int):
@@ -399,8 +484,8 @@ def check_update_charm_pins_prs(repo: github.Repository.Repository):
         exit(1)
 
 
-def release(owner: str, repo_name: str, branch: str):
-    """Create a release, update changelog, and create a PR for the release."""
+def draft_release(owner: str, repo_name: str, branch: str):
+    """Create a draft release, update changelog, and create a PR for the release."""
     org = gh_client.get_organization(owner)
     repo = org.get_repo(repo_name)
 
@@ -421,7 +506,7 @@ def release(owner: str, repo_name: str, branch: str):
     if not title:
         title = tag
     notes = f'{summary}\n{notes}'
-    update_release(release, title, notes)
+    update_draft_release(release, title, notes)
 
     changes = format_changes(categories, tag)
     update_changes_file(changes, 'CHANGES.md')
@@ -436,12 +521,32 @@ def release(owner: str, repo_name: str, branch: str):
     subprocess.run(['/usr/bin/git', 'commit', '-m', f'chore: prepare release {tag}'], check=True)
     subprocess.run(['/usr/bin/git', 'push', 'origin', new_branch], check=True)
     pr = repo.create_pull(
-        title=f'Release Preparation: {tag}',
+        title=f'chore: update changelog and versions for {tag} release',
         body=f'This PR prepares the release of version {tag}.',
         head=f'{gh_client.get_user().login}:{new_branch}',  # "your_username:new_branch"
         base=branch,
     )
     logger.info(f'Created PR: {pr.html_url}')
+
+
+def publish_draft_release(owner: str, repo_name: str):
+    """Publish the draft release."""
+    org = gh_client.get_organization(owner)
+    repo = org.get_repo(repo_name)
+
+    releases = repo.get_releases()
+    draft = None
+    for release in releases:
+        if release.draft:
+            draft = release
+            break
+
+    if not draft:
+        logger.error('No draft release found. Please create a draft release first.')
+        return
+
+    logger.info(f'Publishing draft release: {draft.title} {draft.html_url}')
+    draft.update_release(name=draft.title, message=draft.body, draft=False)
 
 
 def post_release(owner: str, repo_name: str, branch: str):
@@ -453,7 +558,7 @@ def post_release(owner: str, repo_name: str, branch: str):
     org = gh_client.get_organization(owner)
     repo = org.get_repo(repo_name)
 
-    update_versions_for_post_release()
+    update_versions_for_post_release(repo, branch)
 
     new_branch = 'post-release'
     subprocess.run(['/usr/bin/git', 'checkout', '-b', new_branch], check=True)
@@ -486,13 +591,37 @@ if __name__ == '__main__':
     )
     parser.add_argument('--branch', '-b', help='Branch to create the release from', default='main')
     parser.add_argument(
+        '--publish',
+        action='store_true',
+        help='After drafting a release and merging the version bump PR, publish the release',
+    )
+    parser.add_argument(
         '--post-release',
         action='store_true',
         help='After release, bump version and add .dev0 suffix',
     )
     args = parser.parse_args()
 
-    if not args.post_release:
-        release(owner=args.owner, repo_name=args.repo, branch=args.branch)
-    else:
+    if not args.publish and not args.post_release:
+        draft_release(owner=args.owner, repo_name=args.repo, branch=args.branch)
+        logger.info(
+            'Draft release created. Please merge the version bump PR and then run this script '
+            'with --publish to publish the release.'
+        )
+        exit(0)
+
+    if args.publish:
+        publish_draft_release(owner=args.owner, repo_name=args.repo)
+        logger.info(
+            'Draft release published. Please run this script with --post-release '
+            'to update the version files.'
+        )
+        exit(0)
+
+    if args.post_release:
         post_release(owner=args.owner, repo_name=args.repo, branch=args.branch)
+        logger.info(
+            'Post-release actions completed. Please check and merge the created PR '
+            'for version updates.'
+        )
+        exit(0)
