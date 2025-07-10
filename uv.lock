@@ -1396,7 +1396,7 @@ requires-dist = [
 
 [[package]]
 name = "ops-tracing"
-version = "8.2.0.dev0"
+version = "3.2.0.dev0"
 source = { editable = "tracing" }
 dependencies = [
     { name = "opentelemetry-sdk" },
