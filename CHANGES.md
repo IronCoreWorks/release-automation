@@ -1,3 +1,22 @@
+# 0.2.0 - 24 July 2025
+
+## Features
+
+* Add changes.md (#6)
+* Update release automation script and versions (#20)
+* Update (#23)
+* Update release script (#24)
+
+
+## Documentation
+
+* Add version (#3)
+
+
+## Tests
+
+* Add test (#4)
+
 # 8.1.0 - 09 July 2025
 
 ## Features
