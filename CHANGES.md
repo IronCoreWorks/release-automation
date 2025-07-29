@@ -1,3 +1,9 @@
+# 2.23.1 - 29 July 2025
+
+## Features
+
+* Updates for 2.23 (#34)
+
 # 0.2.0 - 28 July 2025
 
 ## Features
