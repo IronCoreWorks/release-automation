@@ -1,3 +1,10 @@
+# 2.24.0 - 31 July 2025
+
+## Features
+
+* Update release.py (#38)
+* Update (#42)
+
 # 0.2.0 - 28 July 2025
 
 ## Features
